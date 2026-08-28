@@ -24,7 +24,7 @@
         };
         klepto = rustPlatform.buildRustPackage {
           pname = "klepto";
-          version = "0.5.4";
+          version = "0.5.5";
           src = ./klepto;
           cargoLock = {
             lockFile = ./klepto/Cargo.lock;
