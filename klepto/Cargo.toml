@@ -1,6 +1,6 @@
 [package]
 name = "klepto"
-version = "0.5.5"
+version = "0.5.6"
 edition = "2024"
 description = "Local-first Rust harness around oh-my-pi (omp) — daemon + CLI + VSCodium extension bridge"
 license = "MIT"
