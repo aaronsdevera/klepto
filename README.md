@@ -44,7 +44,8 @@ The installer:
 - verifies SHA-256 checksums,
 - installs the daemon at `~/.klepto/bin/klepto` and adds that directory to your shell `PATH`,
 - downloads the VSIX and installs it with `code`, `codium`, or `cursor` when available,
-- runs `klepto doctor --install` for runtime dependencies (`tmux`, `omp`, `rg`).
+- runs `klepto doctor --install` for runtime dependencies (`tmux`, `omp`, `rg`),
+- restarts an existing Klepto user service (or leftover `klepto serve`) so the new binary is used immediately.
 
 Common flags:
 

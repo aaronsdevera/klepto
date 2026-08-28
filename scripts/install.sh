@@ -108,6 +108,46 @@ verify_download() {
   }
 }
 
+# Replacing the binary does not update a process that already has it mapped.
+# Reload launchd here (do not call `klepto service restart` on an older binary —
+# kickstart keeps the previous code-signature cache).
+restart_running_daemon() {
+  bin_path="$1"
+  plist="$HOME/Library/LaunchAgents/com.klepto.daemon.plist"
+  unit="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/klepto.service"
+
+  if [ -f "$plist" ]; then
+    echo "Restarting the Klepto user service so the new binary is used..."
+    domain="gui/$(id -u)"
+    launchctl bootout "$domain" "$plist" 2>/dev/null || true
+    if launchctl bootstrap "$domain" "$plist" \
+      && launchctl kickstart -k "$domain/com.klepto.daemon"; then
+      echo "Restarted the Klepto daemon."
+    else
+      echo "warning: could not reload the launchd agent. Run: klepto service restart" >&2
+    fi
+    return 0
+  fi
+
+  if [ -f "$unit" ]; then
+    echo "Restarting the Klepto user service so the new binary is used..."
+    if run_ni "$bin_path" service restart; then
+      echo "Restarted the Klepto daemon."
+    else
+      echo "warning: could not restart the Klepto service. Run: klepto service restart" >&2
+    fi
+    return 0
+  fi
+
+  leftover="$(pgrep -f '[k]lepto serve' 2>/dev/null || true)"
+  if [ -n "$leftover" ]; then
+    echo "Stopping leftover klepto serve so the next editor start uses the new binary..."
+    # word-split intended: pgrep may return several PIDs
+    # shellcheck disable=SC2086
+    kill $leftover 2>/dev/null || true
+  fi
+}
+
 configure_path() {
   dest="$1"
   shell_path="${SHELL:-}"
@@ -367,6 +407,8 @@ bin_path="$DEST/klepto"
 download_verified "$asset" "$bin_path" "$base"
 chmod 755 "$bin_path"
 if [ "$os" = darwin ]; then
+  # curl-downloaded binaries carry quarantine; launchd then rejects an ad-hoc sign.
+  xattr -cr "$bin_path" 2>/dev/null || true
   codesign --force --sign - "$bin_path" >/dev/null 2>&1 || true
 fi
 configure_path "$DEST"
@@ -384,6 +426,8 @@ if [ "$SKIP_DOCTOR" != 1 ]; then
     exit 1
   fi
 fi
+
+restart_running_daemon "$bin_path"
 
 echo
 echo "Klepto $tag is ready."

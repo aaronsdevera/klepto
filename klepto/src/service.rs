@@ -426,9 +426,38 @@ pub fn stop() -> Result<(), String> {
 }
 
 pub fn restart() -> Result<(), String> {
-    // stop may fail if not running — still try start
-    let _ = stop();
-    start()
+    match Platform::detect()? {
+        // bootout+bootstrap reloads the job so launchd accepts a replaced binary
+        // (kill+kickstart keeps the old code-signature cache and can fail with
+        // OS_REASON_CODESIGNING after `install.sh` overwrites ~/.klepto/bin/klepto).
+        Platform::Launchd => {
+            let plist = launchd_plist_path();
+            if !plist.exists() {
+                return Err("service not installed — run `klepto service install` first".into());
+            }
+            let domain = format!("gui/{}", uid());
+            let _ = run("launchctl", &["bootout", &domain, &plist.to_string_lossy()]);
+            run_ok(
+                "launchctl",
+                &["bootstrap", &domain, &plist.to_string_lossy()],
+                "launchctl bootstrap",
+            )?;
+            let _ = run(
+                "launchctl",
+                &[
+                    "kickstart",
+                    "-k",
+                    &format!("{domain}/{LAUNCHD_LABEL}"),
+                ],
+            );
+            println!("Restarted {LAUNCHD_LABEL}");
+            Ok(())
+        }
+        Platform::SystemdUser => {
+            let _ = stop();
+            start()
+        }
+    }
 }
 
 pub fn status() -> Result<(), String> {

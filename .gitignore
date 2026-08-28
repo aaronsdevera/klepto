@@ -27,14 +27,7 @@ target/
 Thumbs.db
 
 # Klepto local state
-.klepto/local/
-.klepto/index/
-.klepto/annotations/
-.klepto/sessions/
-.klepto/uploads/
-.klepto/artifacts/
-.klepto/plans/
-.klepto/memory/
+.klepto
 
 # Logs
 *.log

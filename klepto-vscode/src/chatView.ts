@@ -288,7 +288,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     if (!session) return null;
     if (session.status && session.status !== 'Running') {
       vscode.window.showErrorMessage(
-        `Klepto session ${session.id} failed to start a live tmux harness (status=${session.status}). Check that node is available for pi.`
+        `Klepto session ${session.id} failed to start a live tmux harness (status=${session.status}). Check that omp and tmux are on PATH, then restart the Klepto daemon.`
       );
       return null;
     }
