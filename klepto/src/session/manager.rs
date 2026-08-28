@@ -196,10 +196,11 @@ impl SessionManager {
         match result {
             Ok(output) => {
                 if output.status.success() {
+                    configure_tmux_session(&tmux_path, &tmux_name).await;
                     // new-session -d returns before the pane command may exit; confirm it lived.
                     let socket = crate::runner::socket_path(cwd, &session.id);
                     if tmux_has_session(&tmux_path, &tmux_name).await
-                        && crate::runner::wait_ready(&socket, 20).await
+                        && crate::runner::wait_ready(&socket, 40).await
                     {
                         info!(
                             "spawned tmux session {} (mode={}, model={:?}): {}",
@@ -648,6 +649,15 @@ async fn read_new_bytes(path: &Path, offset: u64) -> std::io::Result<(Vec<u8>, u
     let mut buf = Vec::new();
     let n = file.read_to_end(&mut buf).await?;
     Ok((buf, offset + n as u64))
+}
+
+async fn configure_tmux_session(tmux_path: &Path, tmux_name: &str) {
+    for (key, value) in [("history-limit", "50000"), ("mouse", "on")] {
+        let _ = tmux_command(tmux_path, None)
+            .args(["set-option", "-t", tmux_name, key, value])
+            .output()
+            .await;
+    }
 }
 
 async fn tmux_session_alive(tmux_path: &Path, tmux_name: &str) -> bool {

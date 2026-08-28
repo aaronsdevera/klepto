@@ -81,11 +81,15 @@ impl WorkspacePaths {
     }
 
     pub fn runner_socket(&self, id: &str) -> PathBuf {
+        // Short name under /tmp. `std::env::temp_dir()` is per-process on macOS
+        // (/var/folders vs TMPDIR=/tmp in tmux), so the daemon and runner
+        // disagreed and prompts failed with ENOENT. Unix socket paths also
+        // must stay under SUN_LEN (~104 bytes).
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(self.root.to_string_lossy().as_bytes());
         let hash = format!("{:x}", hasher.finalize());
-        std::env::temp_dir().join(format!("klepto-{}-{id}.sock", &hash[..10]))
+        PathBuf::from("/tmp").join(format!("klepto-{}-{id}.sock", &hash[..10]))
     }
 }
 
@@ -596,6 +600,20 @@ pub(crate) fn registered_workspaces() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runner_socket_is_short_and_shared() {
+        let paths = WorkspacePaths::new("/Users/user/Documents/eng/klepto");
+        let socket = paths.runner_socket("f69c15b1");
+        assert_eq!(socket.parent().map(|p| p.as_os_str()), Some(std::ffi::OsStr::new("/tmp")));
+        assert!(socket.to_string_lossy().starts_with("/tmp/klepto-"));
+        assert!(socket.to_string_lossy().ends_with("-f69c15b1.sock"));
+        assert!(
+            socket.as_os_str().len() < 104,
+            "unix socket path too long: {}",
+            socket.display()
+        );
+    }
 
     #[test]
     fn workspace_layout_migrates_only_generated_gitignore() {
