@@ -1,0 +1,35 @@
+name: VSIX
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: vsix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: klepto-vscode/package-lock.json
+
+      - name: Build VSIX
+        run: ./scripts/build-vsix.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: klepto-vscode
+          path: |
+            dist/*.vsix
+            dist/*.vsix.sha256
+          if-no-files-found: error

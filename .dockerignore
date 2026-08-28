@@ -1,0 +1,15 @@
+.git
+.cursor
+**/target
+**/node_modules
+**/dist
+**/*.vsix
+agent-transcripts
+planning
+klepto/
+klepto-vscode/
+*.log
+.DS_Store
+# Keep .oci/klepto (staged Linux binary); ignore everything else under .oci
+.oci/**
+!.oci/klepto

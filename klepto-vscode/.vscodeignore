@@ -1,0 +1,15 @@
+.vscode/**
+.vscode-test/**
+src/**
+dist/test/**
+test/**
+node_modules/**
+.gitignore
+.vscodeignore
+**/tsconfig.json
+**/*.map
+**/*.ts
+!media/**
+webpack.config.js
+**/.eslintrc*
+**/eslint.config.*

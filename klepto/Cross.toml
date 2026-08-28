@@ -1,0 +1,14 @@
+# Cross-compilation notes for Debian/Ubuntu-compatible glibc binaries.
+#
+# Local / Make (preferred): cargo-zigbuild via scripts/build-linux.sh — no Docker.
+#   make release-linux
+#
+# Targets:
+#   x86_64-unknown-linux-gnu   → dist/klepto-linux-amd64
+#   aarch64-unknown-linux-gnu  → dist/klepto-linux-arm64
+#
+# Optional legacy Docker path: `cargo install cross` + `cross build --target …`
+# (requires a working Docker daemon; not used by Make anymore).
+
+[build.env]
+passthrough = ["RUSTFLAGS"]

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src {{cspSource}} https: data:; style-src {{cspSource}}; script-src 'nonce-{{nonce}}';"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="{{styleUri}}" />
+    <title>Klepto Plan</title>
+  </head>
+  <body>
+    <header class="toolbar">
+      <div>
+        <span class="eyebrow">Klepto Plan</span>
+        <span id="state"></span>
+      </div>
+      <div class="actions">
+        <button id="source" class="secondary">Open Markdown</button>
+        <button id="build" class="primary">Build</button>
+      </div>
+    </header>
+    <main>
+      <section class="hero">
+        <h1 id="title">Loading plan…</h1>
+        <p id="overview"></p>
+        <div id="error" role="alert"></div>
+      </section>
+      <section id="todoSection">
+        <div class="section-heading"><h2 id="todoHeading">To-dos</h2></div>
+        <div id="todos"></div>
+      </section>
+      <section id="agentSection">
+        <div class="section-heading"><h2 id="agentHeading">Referenced Agents</h2></div>
+        <div id="agents"></div>
+      </section>
+      <article id="content"></article>
+    </main>
+    <script nonce="{{nonce}}" src="{{scriptUri}}"></script>
+  </body>
+</html>

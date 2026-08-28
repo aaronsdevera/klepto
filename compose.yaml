@@ -1,0 +1,38 @@
+# Template compose file for klepto serve.
+# Workspace shares are usually added by the VS Code extension via `docker|container run -v`.
+# For manual use, uncomment and adjust the volume lines below.
+
+services:
+  klepto:
+    image: klepto:local
+    # Prefer `make image` (stages dist/klepto-linux-* → .oci/klepto). Plain
+    # `compose build` expects that binary already at .oci/klepto.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: klepto
+    ports:
+      - "127.0.0.1:7420:7420"
+    environment:
+      KLEPTO_LISTEN: "0.0.0.0:7420"
+      KLEPTO_IN_OCI: "1"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 4g
+    cpus: 4
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m
+    volumes:
+      # Global Klepto config, profiles, skills, and memory
+      - klepto-data:/home/klepto/.klepto
+      # pi auth / models (host path — adjust for your machine)
+      # - ${HOME}/.pi:/home/klepto/.pi
+      # Same-path workspace bind (example):
+      # - /path/to/workspace:/path/to/workspace
+    restart: unless-stopped
+
+volumes:
+  klepto-data:

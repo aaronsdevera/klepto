@@ -1,0 +1,40 @@
+[package]
+name = "klepto"
+version = "0.5.3"
+edition = "2024"
+description = "Local-first Rust harness around oh-my-pi (omp) — daemon + CLI + VSCodium extension bridge"
+license = "MIT"
+authors = ["Klepto contributors"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.8", features = ["ws"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots"] }
+tower-http = { version = "0.6", features = ["cors", "fs"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+toml = "0.8"
+dirs = "6"
+futures = "0.3"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+# rustls: cross-compile friendly (no host OpenSSL / Docker cross image required)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "socks"] }
+sha2 = "0.10"
+which = "7"
+ignore = "0.4"
+tree-sitter = "0.26.11"
+tree-sitter-rust = "0.24.2"
+tree-sitter-python = "0.25.0"
+tree-sitter-typescript = "0.23.2"
+percent-encoding = "2.3.2"
+serde_yaml = "0.9.34"
+
+[dev-dependencies]
+http-body-util = "0.1.4"
+tower = { version = "0.5.3", features = ["util"] }

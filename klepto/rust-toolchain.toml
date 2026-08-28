@@ -1,0 +1,10 @@
+# Pin toolchain and declare Linux (Debian/glibc) release targets.
+# Targets are installed automatically on `rustup show` / first cargo build.
+[toolchain]
+channel = "stable"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+]

@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: linux
+    uses: ./.github/workflows/linux-binaries.yml
+
+  darwin:
+    name: darwin
+    uses: ./.github/workflows/darwin-binaries.yml
+
+  windows:
+    name: windows
+    uses: ./.github/workflows/windows-binaries.yml
+
+  vsix:
+    name: vsix
+    uses: ./.github/workflows/vsix.yml
+
+  publish:
+    name: attach-assets
+    needs: [linux, darwin, windows, vsix]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Attach artifacts to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          shopt -s nullglob
+          files=(artifacts/*)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "error: no release artifacts downloaded" >&2
+            exit 1
+          fi
+          echo "Attaching ${#files[@]} files to $tag:"
+          ls -lh "${files[@]}"
+
+          if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --repo "${{ github.repository }}" --clobber
+          else
+            gh release create "$tag" "${files[@]}" \
+              --repo "${{ github.repository }}" \
+              --title "$tag" \
+              --generate-notes \
+              --verify-tag
+          fi

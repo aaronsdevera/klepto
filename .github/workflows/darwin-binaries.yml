@@ -1,0 +1,41 @@
+name: Darwin binaries
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: darwin-${{ matrix.arch }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            name: darwin-amd64
+          - arch: arm64
+            name: darwin-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Build release binary
+        run: ./scripts/build-darwin.sh ${{ matrix.arch }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: klepto-${{ matrix.name }}
+          path: |
+            dist/klepto-${{ matrix.name }}
+            dist/klepto-${{ matrix.name }}.sha256
+          if-no-files-found: error

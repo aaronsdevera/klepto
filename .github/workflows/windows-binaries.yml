@@ -1,0 +1,40 @@
+name: Windows binaries
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: windows-${{ matrix.arch }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            name: windows-amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build release binary
+        shell: bash
+        run: ./scripts/build-windows.sh ${{ matrix.arch }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: klepto-${{ matrix.name }}
+          path: |
+            dist/klepto-${{ matrix.name }}.exe
+            dist/klepto-${{ matrix.name }}.exe.sha256
+          if-no-files-found: error

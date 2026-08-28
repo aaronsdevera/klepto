@@ -1,0 +1,323 @@
+{
+  "name": "klepto-vscode",
+  "displayName": "Klepto",
+  "description": "Klepto daemon client — chat sidebar, session management, editor context",
+  "version": "0.5.3",
+  "publisher": "klepto",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other",
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "klepto.openChat",
+        "title": "Klepto: Open Chat",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.startDaemon",
+        "title": "Klepto: Start Daemon",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.stopDaemon",
+        "title": "Klepto: Stop Daemon",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.createNewSession",
+        "title": "Klepto: New Chat Message",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.newChatTab",
+        "title": "Klepto: New Chat Tab",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.stopSession",
+        "title": "Klepto: Stop Active Response",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.openInTerminal",
+        "title": "Klepto: Open Session in Terminal",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.recallMemory",
+        "title": "Klepto: Recall Memory",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.restartDaemon",
+        "title": "Klepto: Restart Daemon",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.manageSharedFolders",
+        "title": "Klepto: Manage Shared Folders",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.manageProviders",
+        "title": "Klepto: Manage Providers",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.runOnboarding",
+        "title": "Klepto: Run Setup",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.manageIncludedModels",
+        "title": "Klepto: Manage Included Models",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.createPlan",
+        "title": "Klepto: Create Plan from Chat",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.openLatestPlan",
+        "title": "Klepto: Open Latest Plan",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.buildPlan",
+        "title": "Klepto: Build Plan",
+        "category": "Klepto"
+      },
+      {
+        "command": "klepto.generateCommitMessage",
+        "title": "Klepto: Generate Commit Message",
+        "category": "Klepto",
+        "icon": "$(sparkle)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "klepto.openChat",
+        "key": "cmd+l",
+        "mac": "cmd+l",
+        "when": "!terminalFocus"
+      },
+      {
+        "command": "klepto.openChat",
+        "key": "ctrl+l",
+        "when": "!terminalFocus"
+      },
+      {
+        "command": "klepto.newChatTab",
+        "key": "ctrl+t",
+        "mac": "cmd+t",
+        "when": "focusedView == 'klepto.chat' || (webviewViewFocus && webviewId == 'klepto.chat')"
+      },
+      {
+        "command": "klepto.newChatTab",
+        "key": "ctrl+n",
+        "mac": "cmd+n",
+        "when": "focusedView == 'klepto.chat' || (webviewViewFocus && webviewId == 'klepto.chat')"
+      },
+      {
+        "command": "klepto.stopSession",
+        "key": "escape",
+        "when": "klepto.generating && (focusedView == 'klepto.chat' || (webviewViewFocus && webviewId == 'klepto.chat'))"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "klepto.generateCommitMessage",
+          "when": "scmProvider == git",
+          "group": "navigation@1"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "klepto",
+          "title": "Klepto",
+          "icon": "media/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "klepto": [
+        {
+          "type": "webview",
+          "id": "klepto.chat",
+          "name": "Chat",
+          "visibility": "visible"
+        },
+        {
+          "type": "tree",
+          "id": "klepto.sessions",
+          "name": "Sessions"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "klepto.planPreview",
+        "displayName": "Klepto Plan",
+        "selector": [
+          {
+            "filenamePattern": "**/.klepto/plans/*.md"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "configuration": {
+      "title": "Klepto",
+      "properties": {
+        "klepto.daemon.listen": {
+          "type": "string",
+          "default": "127.0.0.1:7420",
+          "description": "Daemon address as host:port (e.g. 127.0.0.1:7420 or 192.0.2.10:7420). http(s):// URLs are accepted and normalized. Non-loopback hosts are connect-only (no local spawn)."
+        },
+        "klepto.daemon.token": {
+          "type": "string",
+          "default": "",
+          "description": "Bearer token for an authenticated daemon. Prefer VS Code user settings and do not commit this value to workspace settings."
+        },
+        "klepto.daemon.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start Klepto daemon on activation"
+        },
+        "klepto.daemon.path": {
+          "type": "string",
+          "default": "",
+          "description": "Explicit Klepto binary override for host runtime. When empty, searches ~/.klepto/bin/klepto, /usr/local/bin/klepto, then ~/.local/bin/klepto."
+        },
+        "klepto.daemon.runtime": {
+          "type": "string",
+          "enum": ["host", "oci", "nix"],
+          "default": "host",
+          "description": "How to run klepto serve: host binary, OCI container (docker/container), or nix"
+        },
+        "klepto.daemon.oci.command": {
+          "type": "string",
+          "enum": ["auto", "docker", "container"],
+          "default": "auto",
+          "description": "OCI runtime CLI when daemon.runtime is oci"
+        },
+        "klepto.daemon.oci.image": {
+          "type": "string",
+          "default": "klepto:local",
+          "description": "OCI image name for klepto serve"
+        },
+        "klepto.daemon.oci.containerName": {
+          "type": "string",
+          "default": "klepto",
+          "description": "Container name for the Klepto daemon"
+        },
+        "klepto.daemon.oci.memoryLimit": {
+          "type": "string",
+          "default": "4g",
+          "description": "OCI memory limit"
+        },
+        "klepto.daemon.oci.cpuLimit": {
+          "type": "string",
+          "default": "4",
+          "description": "OCI CPU limit"
+        },
+        "klepto.network.mode": {
+          "type": "string",
+          "enum": ["direct", "none", "socks5h"],
+          "default": "direct",
+          "description": "Session network policy. 'none' is enforced by the OCI runtime."
+        },
+        "klepto.network.proxyUrl": {
+          "type": "string",
+          "default": "",
+          "description": "SOCKS proxy URL; must use socks5h:// so DNS resolves through the proxy."
+        },
+        "klepto.network.denyDirect": {
+          "type": "boolean",
+          "default": false,
+          "description": "Reject startup unless the runtime can enforce no direct egress."
+        },
+        "klepto.daemon.nix.command": {
+          "type": "string",
+          "default": "nix run .#klepto --",
+          "description": "Command prefix to launch klepto via Nix (runtime=nix)"
+        },
+        "klepto.daemon.nix.cwd": {
+          "type": "string",
+          "default": "",
+          "description": "Working directory for nix run (empty = first workspace folder)"
+        },
+        "klepto.defaultMode": {
+          "type": "string",
+          "enum": ["agent", "plan", "debug"],
+          "default": "agent",
+          "description": "Default chat mode for new sessions"
+        },
+        "klepto.defaultProvider": {
+          "type": "string",
+          "default": "",
+          "description": "Default LLM provider for new sessions (empty = pi default). Configure credentials via “Klepto: Manage Providers”."
+        },
+        "klepto.defaultModel": {
+          "type": "string",
+          "default": "",
+          "description": "Default model for new sessions (empty = pi default; accepts provider/id). Limit the picker with includedModels or “Klepto: Manage Included Models”."
+        },
+        "klepto.includedModels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Allowlist of model labels (provider/id) shown in the chat picker. Empty = show all discovered models. Edit via “Klepto: Manage Included Models”."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "npm run compile && vsce package --no-dependencies --allow-missing-repository",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src --ext ts",
+    "test:unit": "npm run compile && node --test dist/test/*.test.js test/*.test.js",
+    "pretest": "npm run compile",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "18.x",
+    "@typescript-eslint/eslint-plugin": "^5.59.0",
+    "@typescript-eslint/parser": "^5.59.0",
+    "@vscode/vsce": "^3.2.1",
+    "eslint": "^8.39.0",
+    "glob": "^8.1.0",
+    "minimist": "^1.2.8",
+    "mocha": "^10.2.0",
+    "typescript": "^5.1.3",
+    "@vscode/test-cli": "^0.0.4",
+    "@vscode/test-electron": "^2.3.0",
+    "@vscode/webview-ui-toolkit": "^1.4.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.0.2"
+  }
+}

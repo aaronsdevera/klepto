@@ -1,0 +1,75 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.oci/
+out/
+*.vsix
+
+
+# Rust / Cargo
+debug/
+target/
+**/*.rs.bk
+*.pdb
+**/mutants.out*/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Klepto local state
+.klepto/local/
+.klepto/index/
+.klepto/annotations/
+.klepto/sessions/
+.klepto/uploads/
+.klepto/artifacts/
+.klepto/plans/
+.klepto/memory/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Cache
+.cache/
+*.tsbuildinfo
+
+# Temporary
+tmp/
+temp/
+.tmp-cursor-docs/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Platform builds
+*.dmg
+*.exe
+*.deb
+*.rpm
+*.msi
+*.app
+
+# VSCodium pipeline checkout (fetched by build/build.sh get)
+build/.vscodium/
+
+# Dev and planning
+planning/
