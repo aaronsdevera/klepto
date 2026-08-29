@@ -221,7 +221,7 @@
     if (!state.sessions[id]) {
       state.sessions[id] = {
         id,
-        title: meta?.title || `Chat ${id.slice(0, 6)}`,
+        title: meta?.title || `Chat ${id.slice(-6)}`,
         status: meta?.status || 'Waiting',
         messages: [],
         generating: false,
@@ -1802,36 +1802,49 @@
   els.input.addEventListener('input', onComposerInput);
   els.input.addEventListener('paste', onComposerPaste);
   // Drag-and-drop: accept files on the whole composer box.
+  // Listeners live on the box itself: the .drop-zone overlay is
+  // pointer-events:none (purely visual), so it can never receive events.
+  function dragHasFiles(e) {
+    const types = e.dataTransfer?.types;
+    return !!(types && Array.from(types).includes('Files'));
+  }
+  function setDragActive(active) {
+    els.dropZone?.classList.toggle('is-active', active);
+    els.composerBox?.classList.toggle('is-dragging', active);
+  }
   function onDragEnter(e) {
+    if (!dragHasFiles(e)) return;
     e.preventDefault();
-    if (!els.dropZone || els.dropZone.classList.contains('is-active')) return;
-    els.dropZone.classList.add('is-active');
-    els.composerBox?.classList.add('is-dragging');
+    if (!els.dropZone?.classList.contains('is-active')) setDragActive(true);
   }
   function onDragOver(e) {
+    if (!dragHasFiles(e)) return;
     e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
   }
   function onDragLeave(e) {
-    if (!els.dropZone) return;
-    // Only close when we actually leave the drop zone, not when moving between children.
-    const rect = els.dropZone.getBoundingClientRect();
+    if (!dragHasFiles(e)) return;
+    const box = els.composerBox || els.dropZone;
+    if (!box) return;
+    // Only close when we actually leave the box, not when moving between children.
+    const rect = box.getBoundingClientRect();
     if (e.clientX < rect.left || e.clientX >= rect.right || e.clientY < rect.top || e.clientY >= rect.bottom) {
-      els.dropZone.classList.remove('is-active');
-      els.composerBox?.classList.remove('is-dragging');
+      setDragActive(false);
     }
   }
   function onDrop(e) {
+    if (!dragHasFiles(e)) return;
     e.preventDefault();
-    els.dropZone?.classList.remove('is-active');
-    els.composerBox?.classList.remove('is-dragging');
+    setDragActive(false);
     const files = [...(e.dataTransfer?.files || [])];
     for (const f of files) attachBlob(f);
   }
-  if (els.dropZone) {
-    els.dropZone.addEventListener('dragenter', onDragEnter);
-    els.dropZone.addEventListener('dragover', onDragOver);
-    els.dropZone.addEventListener('dragleave', onDragLeave);
-    els.dropZone.addEventListener('drop', onDrop);
+  const dragTarget = els.composerBox || els.dropZone;
+  if (dragTarget) {
+    dragTarget.addEventListener('dragenter', onDragEnter);
+    dragTarget.addEventListener('dragover', onDragOver);
+    dragTarget.addEventListener('dragleave', onDragLeave);
+    dragTarget.addEventListener('drop', onDrop);
   }
   function handleComposerEnter(e) {
     if (mentionState.open && els.mentionMenu && !els.mentionMenu.hidden) {
@@ -2053,7 +2066,7 @@
         }
         for (const s of liveSessions) {
           ensureSession(s.id, {
-            title: state.sessions[s.id]?.title || `Chat ${s.id.slice(0, 6)}`,
+            title: state.sessions[s.id]?.title || `Chat ${s.id.slice(-6)}`,
             status: s.status,
             profile: s.profile,
           });
@@ -2073,7 +2086,7 @@
         const s = msg.session;
         if (!s) break;
         ensureSession(s.id, {
-          title: `Chat ${s.id.slice(0, 6)}`,
+          title: `Chat ${s.id.slice(-6)}`,
           status: s.status,
           agentMode: s.agent_mode || state.prefs.agentMode || 'agent',
           profile: s.profile || state.prefs.profile || profileForMode(state.prefs.agentMode || 'agent'),

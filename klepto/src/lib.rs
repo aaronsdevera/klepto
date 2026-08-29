@@ -16,7 +16,7 @@ pub mod service;
 pub mod session;
 pub mod skills;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use uuid::Uuid;
@@ -313,7 +313,9 @@ pub enum SessionEvent {
 
 impl Session {
     pub fn new(cwd: &str) -> Self {
-        let id = Uuid::new_v4().to_string()[..8].to_string();
+        // yyyymmddHHMM-<8 hex>: sorts chronologically in file listings and pickers.
+        let uuid = Uuid::new_v4().to_string();
+        let id = format!("{}-{}", Local::now().format("%Y%m%d%H%M"), &uuid[..8]);
         Self {
             schema_version: artifacts::SCHEMA_VERSION,
             id: id.clone(),
@@ -381,5 +383,18 @@ mod tests {
     #[test]
     fn expand_prompt_passthrough_without_context() {
         assert_eq!(expand_prompt_message("hi", None), "hi");
+    }
+
+    #[test]
+    fn session_id_is_local_minute_prefixed_uuid_tail() {
+        let before = Local::now().format("%Y%m%d%H%M").to_string();
+        let s = Session::new("/tmp/x");
+        let after = Local::now().format("%Y%m%d%H%M").to_string();
+        let (prefix, tail) = s.id.split_once('-').unwrap();
+        assert!(prefix == before || prefix == after, "prefix {prefix} outside [{before}, {after}]");
+        assert!(prefix.chars().all(|c| c.is_ascii_digit()));
+        assert_eq!(tail.len(), 8);
+        assert!(tail.bytes().all(|b| b.is_ascii_hexdigit()));
+        assert_eq!(s.tmux_name, format!("klepto-{}", s.id));
     }
 }
