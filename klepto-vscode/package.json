@@ -2,7 +2,7 @@
   "name": "klepto-vscode",
   "displayName": "Klepto",
   "description": "Klepto daemon client — chat sidebar, session management, editor context",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "publisher": "klepto",
   "license": "MIT",
   "icon": "media/icon.png",
