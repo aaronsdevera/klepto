@@ -107,9 +107,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (this.view === webviewView) this.view = undefined;
     });
     this.startConnectionPolling();
+    let modelRefreshTicks = 0;
     this.modelRefreshTimer = setInterval(() => {
       void this.daemon.ping().then((connected) => {
-        if (connected) void this.pushModels();
+        if (!connected) return;
+        modelRefreshTicks += 1;
+        // Live provider endpoints every 30s; force omp catalog refresh every 15 min.
+        void this.pushModels(modelRefreshTicks % 30 === 0);
       });
     }, 30_000);
     this.sessionRefreshTimer = setInterval(() => {
@@ -189,7 +193,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   /** Refresh provider/model pickers from the daemon (applies includedModels filter). */
   async refreshModels(): Promise<void> {
-    await this.pushModels();
+    await this.pushModels(true);
   }
 
   async createPlanFromChat(): Promise<void> {
@@ -249,7 +253,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   /** Full model catalog from the daemon (unfiltered) for Manage Included Models. */
   async listModelsCatalog(): Promise<ModelsResponse> {
-    return this.daemon.listModels();
+    return this.daemon.listModels({ refresh: true });
   }
 
   async createAndPromptSession(cwd: string, message: string): Promise<void> {
@@ -414,8 +418,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  private async pushModels(): Promise<void> {
-    const models = filterModelsByAllowlist(await this.daemon.listModels());
+  private async pushModels(refresh = false): Promise<void> {
+    const models = filterModelsByAllowlist(await this.daemon.listModels({ refresh }));
     this.availableModels = new Set(models.models.map((model) => model.label));
     this.view?.webview.postMessage({
       type: 'modelsUpdate',
@@ -639,7 +643,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           root: this.workspaceCwd(),
         });
         await this.refreshSessions();
-        await this.pushModels();
+        await this.pushModels(false);
+        void this.pushModels(true);
         break;
 
       case 'openFile':
@@ -751,7 +756,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         break;
 
       case 'refreshModels':
-        await this.pushModels();
+        await this.pushModels(true);
         break;
 
       case 'fetchUrl':

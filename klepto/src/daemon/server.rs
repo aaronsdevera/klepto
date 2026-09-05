@@ -155,8 +155,22 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
-async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
-    Json(crate::models::list_models(&state.config).await)
+#[derive(Debug, serde::Deserialize, Default)]
+struct ModelsQuery {
+    refresh: Option<String>,
+}
+
+async fn list_models(
+    State(state): State<AppState>,
+    Query(query): Query<ModelsQuery>,
+) -> impl IntoResponse {
+    Json(
+        crate::models::list_models_with_refresh(
+            &state.config,
+            crate::models::refresh_requested(query.refresh.as_deref()),
+        )
+        .await,
+    )
 }
 
 async fn generate_commit_message(

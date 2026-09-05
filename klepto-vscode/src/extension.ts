@@ -203,7 +203,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (!daemon) return false;
     const running = await ensureDaemonAvailable();
     if (!running) return false;
-    const catalog = await daemon.listModels();
+    const catalog = await daemon.listModels({ refresh: true });
     if (catalog.suggested) {
       const choice = await vscode.window.showInformationMessage(
         'Klepto is running. Configure a hosted or self-hosted model to start working.',
@@ -410,7 +410,7 @@ export function activate(context: vscode.ExtensionContext) {
         await bootstrapWorkspaces();
         await chatViewProvider?.refreshSessions();
         sessionTree.refresh();
-        const models = await daemon?.listModels();
+        const models = await daemon?.listModels({ refresh: true });
         if (
           models?.suggested &&
           !context.globalState.get<boolean>('klepto.onboarding.modelPrompted')

@@ -242,23 +242,12 @@ async function addOpenAiCompatConnection(api: ProviderManagerApi): Promise<boole
   });
   if (key === undefined) return false;
 
-  const modelsRaw = await vscode.window.showInputBox({
-    title: `Fallback models for ${providerId} (optional)`,
-    prompt: 'Klepto refreshes /models automatically; enter comma-separated ids only as fallback',
-    placeHolder: 'Leave empty for live discovery',
-    ignoreFocusOut: true,
-  });
-  if (modelsRaw === undefined) return false;
-  const modelIds = modelsRaw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
   await api.upsertProvider({
     id: providerId,
     kind: 'openai_compatible',
     base_url: baseUrl.trim(),
     api: 'openai-completions',
-    models: modelIds,
+    models: [],
     api_key: key.trim() || 'no-key',
   });
   vscode.window.showInformationMessage(
@@ -389,6 +378,11 @@ export async function manageProviders(api: ProviderManagerApi): Promise<boolean>
         action: 'compat' as const,
       },
       {
+        label: 'Refresh available models',
+        description: 'Re-query configured providers and the omp catalog',
+        action: 'refresh' as const,
+      },
+      {
         label: 'Remove connection',
         description: 'Delete from Klepto catalog / models.yml',
         action: 'remove' as const,
@@ -410,6 +404,8 @@ export async function manageProviders(api: ProviderManagerApi): Promise<boolean>
       return addOpenAiCompatConnection(api);
     case 'ollama':
       return addOllamaConnection(api);
+    case 'refresh':
+      return true;
     case 'remove':
       return removeConnection(api);
     case 'status':

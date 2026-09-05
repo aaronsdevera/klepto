@@ -3,6 +3,8 @@ name: VSIX
 on:
   workflow_call:
   workflow_dispatch:
+  push:
+    branches: [main]
   pull_request:
 
 permissions:

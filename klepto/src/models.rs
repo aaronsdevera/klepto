@@ -1,12 +1,14 @@
-//! Discover models available to omp (`omp models --json` + models.yml).
+//! Discover models available to omp (`omp models --json` + live provider APIs).
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::process::Command;
+use std::time::Duration;
 
 use crate::config::Config;
 use crate::deps;
+use crate::providers::{DiscoveryTarget, ProviderKind};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelInfo {
@@ -98,16 +100,35 @@ fn parse_omp_models_json(raw: &str) -> Result<Vec<ModelInfo>, String> {
     Ok(out)
 }
 
-fn run_omp_list_models(config: &Config) -> Result<Vec<ModelInfo>, String> {
+pub fn omp_models_args(refresh: bool) -> &'static [&'static str] {
+    if refresh {
+        &["models", "refresh", "--json"]
+    } else {
+        &["models", "--json"]
+    }
+}
+
+pub fn refresh_requested(value: Option<&str>) -> bool {
+    matches!(
+        value.map(str::trim).map(str::to_ascii_lowercase).as_deref(),
+        Some("1" | "true" | "yes" | "on")
+    )
+}
+
+async fn run_omp_list_models(config: &Config, refresh: bool) -> Result<Vec<ModelInfo>, String> {
     let omp = deps::resolve_bin(&config.omp_bin).ok_or_else(|| {
         format!(
             "omp binary '{}' not found — run `klepto doctor --install`",
             config.omp_bin
         )
     })?;
-    let output = Command::new(&omp)
-        .args(["models", "--json"])
-        .output()
+    let args: Vec<String> = omp_models_args(refresh)
+        .iter()
+        .map(|arg| (*arg).to_string())
+        .collect();
+    let output = tokio::task::spawn_blocking(move || Command::new(&omp).args(&args).output())
+        .await
+        .map_err(|e| format!("join omp models: {e}"))?
         .map_err(|e| format!("failed to run omp models --json: {e}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -142,59 +163,94 @@ fn finalize(
     }
 }
 
+fn replace_provider_models(models: &mut Vec<ModelInfo>, provider: &str, ids: &[String]) {
+    models.retain(|model| model.provider != provider);
+    models.extend(ids.iter().cloned().map(|id| ModelInfo {
+        label: format!("{provider}/{id}"),
+        provider: provider.to_string(),
+        id,
+    }));
+}
+
+fn discovery_timeout(base_url: &str) -> Duration {
+    if crate::providers::is_loopback_url(base_url) {
+        Duration::from_millis(800)
+    } else {
+        Duration::from_secs(5)
+    }
+}
+
 pub async fn list_models(config: &Config) -> ModelsResponse {
+    list_models_with_refresh(config, false).await
+}
+
+pub async fn list_models_with_refresh(config: &Config, refresh: bool) -> ModelsResponse {
     let mut models = Vec::new();
     let mut messages = Vec::new();
 
-    match run_omp_list_models(config) {
+    match run_omp_list_models(config, refresh).await {
         Ok(listed) => models.extend(listed),
         Err(e) => messages.push(e),
     }
 
     models.extend(from_models_yml());
-    // Only auto-refresh providers owned by the Klepto catalog. Entries that exist
-    // solely in ~/.omp/agent/models.yml are user-owned and must not be rewritten.
+
     let catalog = crate::providers::load_catalog();
-    for (provider, definition) in catalog.providers {
-        if crate::providers::is_default_local_ollama(&definition) {
-            // omp already discovers local Ollama; avoid duplicate catalog writes.
-            continue;
-        }
-        if let Some(base_url) = definition.base_url.as_deref() {
-            let discovered = match definition.kind {
-                crate::providers::ProviderKind::OpenaiCompatible => {
-                    discover_openai_models(&provider, base_url).await
-                }
-                crate::providers::ProviderKind::Ollama => {
-                    discover_ollama_models(&provider, base_url).await
-                }
-            };
-            match discovered {
-                Ok(discovered) => {
-                    models.retain(|model| model.provider != provider);
-                    models.extend(discovered.iter().cloned().map(|id| ModelInfo {
-                        label: format!("{provider}/{id}"),
-                        provider: provider.clone(),
-                        id,
-                    }));
-                    if definition.models != discovered {
-                        let mut refreshed = definition.clone();
-                        refreshed.models = discovered;
-                        if let Err(error) = crate::providers::upsert(refreshed, None) {
-                            messages.push(format!("{provider}: {error}"));
+    let mut targets = crate::providers::discovery_targets();
+    if models.iter().any(|model| model.provider == "ollama")
+        && !targets.iter().any(|target| target.id == "ollama")
+    {
+        targets.push(DiscoveryTarget {
+            id: "ollama".into(),
+            base_url: "http://127.0.0.1:11434".into(),
+            kind: ProviderKind::Ollama,
+            persist: false,
+            required: false,
+        });
+    }
+
+    let discoveries = futures::future::join_all(targets.into_iter().map(|target| async move {
+        let timeout = discovery_timeout(&target.base_url);
+        let result = match target.kind {
+            ProviderKind::OpenaiCompatible => {
+                discover_openai_models(&target.id, &target.base_url, timeout).await
+            }
+            ProviderKind::Ollama => {
+                discover_ollama_models_timed(&target.id, &target.base_url, timeout).await
+            }
+        };
+        (target, result)
+    }))
+    .await;
+
+    for (target, result) in discoveries {
+        match result {
+            Ok(discovered) => {
+                replace_provider_models(&mut models, &target.id, &discovered);
+                if target.persist {
+                    if let Some(definition) = catalog.providers.get(&target.id) {
+                        if definition.models != discovered {
+                            let mut refreshed = definition.clone();
+                            refreshed.models = discovered;
+                            if let Err(error) = crate::providers::upsert(refreshed, None) {
+                                messages.push(format!("{}: {error}", target.id));
+                            }
                         }
                     }
-                    continue;
                 }
-                Err(error) => messages.push(format!("{provider}: {error}")),
             }
-        }
-        for id in definition.models {
-            models.push(ModelInfo {
-                label: format!("{provider}/{id}"),
-                provider: provider.clone(),
-                id,
-            });
+            Err(error) => {
+                if target.required {
+                    messages.push(format!("{}: {error}", target.id));
+                }
+                if let Some(definition) = catalog.providers.get(&target.id) {
+                    if !definition.models.is_empty()
+                        && !models.iter().any(|model| model.provider == target.id)
+                    {
+                        replace_provider_models(&mut models, &target.id, &definition.models);
+                    }
+                }
+            }
         }
     }
 
@@ -218,9 +274,17 @@ pub async fn list_models(config: &Config) -> ModelsResponse {
 }
 
 async fn discover_ollama_models(provider: &str, base_url: &str) -> Result<Vec<String>, String> {
+    discover_ollama_models_timed(provider, base_url, discovery_timeout(base_url)).await
+}
+
+async fn discover_ollama_models_timed(
+    provider: &str,
+    base_url: &str,
+    timeout: Duration,
+) -> Result<Vec<String>, String> {
     let url = format!("{}/api/tags", crate::providers::ollama_root_url(base_url));
     let mut request = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(timeout)
         .build()
         .map_err(|error| format!("build model discovery client: {error}"))?
         .get(&url);
@@ -241,10 +305,14 @@ async fn discover_ollama_models(provider: &str, base_url: &str) -> Result<Vec<St
     parse_ollama_models(&value).ok_or_else(|| format!("parse {url}: missing models[].name"))
 }
 
-async fn discover_openai_models(provider: &str, base_url: &str) -> Result<Vec<String>, String> {
+async fn discover_openai_models(
+    provider: &str,
+    base_url: &str,
+    timeout: Duration,
+) -> Result<Vec<String>, String> {
     let url = format!("{}/models", base_url.trim_end_matches('/'));
     let mut request = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(timeout)
         .build()
         .map_err(|error| format!("build model discovery client: {error}"))?
         .get(&url);
@@ -299,7 +367,8 @@ fn parse_openai_models(value: &serde_json::Value) -> Option<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        discover_ollama_models, parse_ollama_models, parse_omp_models_json, parse_openai_models,
+        ModelInfo, discover_ollama_models, omp_models_args, parse_ollama_models,
+        parse_omp_models_json, parse_openai_models, refresh_requested, replace_provider_models,
     };
 
     #[test]
@@ -343,6 +412,44 @@ mod tests {
         assert_eq!(models.len(), 2);
         assert_eq!(models[0].label, "cursor/claude-4-sonnet");
         assert_eq!(models[1].label, "ollama/qwen3:8b");
+    }
+
+    #[test]
+    fn refresh_flag_selects_omp_refresh_command() {
+        assert_eq!(omp_models_args(false), &["models", "--json"]);
+        assert_eq!(omp_models_args(true), &["models", "refresh", "--json"]);
+        assert!(refresh_requested(Some("true")));
+        assert!(refresh_requested(Some("1")));
+        assert!(!refresh_requested(Some("false")));
+        assert!(!refresh_requested(None));
+    }
+
+    #[test]
+    fn live_discovery_replaces_stale_provider_rows() {
+        let mut models = vec![
+            ModelInfo {
+                provider: "litellm".into(),
+                id: "old".into(),
+                label: "litellm/old".into(),
+            },
+            ModelInfo {
+                provider: "openrouter".into(),
+                id: "keep".into(),
+                label: "openrouter/keep".into(),
+            },
+        ];
+        replace_provider_models(
+            &mut models,
+            "litellm",
+            &["[B] Smol".into(), "[B] BigBang V1".into()],
+        );
+        let litellm: Vec<_> = models
+            .iter()
+            .filter(|model| model.provider == "litellm")
+            .map(|model| model.id.as_str())
+            .collect();
+        assert_eq!(litellm, vec!["[B] Smol", "[B] BigBang V1"]);
+        assert!(models.iter().any(|model| model.id == "keep"));
     }
 
     #[tokio::test]

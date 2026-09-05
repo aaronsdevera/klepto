@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
 
@@ -166,19 +166,18 @@ fn materialize_omp(definition: &ProviderDefinition, api_key: Option<&str>) -> Re
         provider_obj.insert("baseUrl".into(), json!(base_url));
         provider_obj.insert(
             "api".into(),
-            json!(definition
-                .api
-                .clone()
-                .unwrap_or_else(|| "openai-completions".into())),
+            json!(
+                definition
+                    .api
+                    .clone()
+                    .unwrap_or_else(|| "openai-completions".into())
+            ),
         );
         if !existing_had_discovery
             && (definition.kind == ProviderKind::OpenaiCompatible
                 || definition.kind == ProviderKind::Ollama)
         {
-            provider_obj.insert(
-                "discovery".into(),
-                json!({ "type": "openai-models-list" }),
-            );
+            provider_obj.insert("discovery".into(), json!({ "type": "openai-models-list" }));
         }
     }
 
@@ -245,8 +244,7 @@ fn read_models_yml() -> serde_json::Value {
     let Ok(raw) = fs::read_to_string(&path) else {
         return json!({ "providers": {} });
     };
-    serde_yaml::from_str::<serde_json::Value>(&raw)
-        .unwrap_or_else(|_| json!({ "providers": {} }))
+    serde_yaml::from_str::<serde_json::Value>(&raw).unwrap_or_else(|_| json!({ "providers": {} }))
 }
 
 fn write_private_yaml(path: &PathBuf, value: &serde_json::Value) -> Result<(), String> {
@@ -312,12 +310,128 @@ pub fn from_models_yml() -> Vec<(String, String)> {
     out
 }
 
+/// Endpoint that can be probed for a live model list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscoveryTarget {
+    pub id: String,
+    pub base_url: String,
+    pub kind: ProviderKind,
+    /// Write discovered ids back into the Klepto catalog (never user-owned yml).
+    pub persist: bool,
+    /// Surface fetch errors in the models response. Implicit probes stay quiet.
+    pub required: bool,
+}
+
+pub fn is_loopback_url(base_url: &str) -> bool {
+    let host = url_host(base_url);
+    host == "127.0.0.1" || host == "localhost" || host == "::1"
+}
+
+fn url_host(base_url: &str) -> String {
+    let trimmed = base_url.trim();
+    let after_scheme = trimmed
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or(trimmed);
+    let authority = after_scheme.split(['/', '?', '#']).next().unwrap_or("");
+    let hostport = authority
+        .rsplit_once('@')
+        .map(|(_, host)| host)
+        .unwrap_or(authority);
+    if let Some(rest) = hostport.strip_prefix('[') {
+        return rest.split(']').next().unwrap_or(hostport).to_string();
+    }
+    hostport
+        .rsplit_once(':')
+        .map(|(host, _)| host)
+        .unwrap_or(hostport)
+        .to_string()
+}
+
+/// Infer whether a models.yml endpoint is Ollama or OpenAI-compatible.
+pub fn infer_discovery_kind(id: &str, api: Option<&str>, base_url: &str) -> ProviderKind {
+    let id_l = id.to_ascii_lowercase();
+    let api_l = api.unwrap_or("").to_ascii_lowercase();
+    if id_l == "ollama"
+        || id_l.starts_with("ollama-")
+        || api_l.contains("ollama")
+        || ollama_root_url(base_url).ends_with(":11434")
+    {
+        return ProviderKind::Ollama;
+    }
+    ProviderKind::OpenaiCompatible
+}
+
+/// models.yml providers that advertise a base URL (live /models or /api/tags).
+pub fn targets_from_models_yml(root: &serde_json::Value) -> Vec<DiscoveryTarget> {
+    let Some(providers) = root.get("providers").and_then(|p| p.as_object()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (id, cfg) in providers {
+        let Some(base_url) = cfg
+            .get("baseUrl")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+        else {
+            continue;
+        };
+        let api = cfg.get("api").and_then(|v| v.as_str());
+        let kind = infer_discovery_kind(id, api, base_url);
+        out.push(DiscoveryTarget {
+            id: id.clone(),
+            base_url: base_url.to_string(),
+            kind,
+            persist: false,
+            required: !is_loopback_url(base_url),
+        });
+    }
+    out
+}
+
+/// Catalog + models.yml endpoints to probe. Klepto-owned rows may be persisted.
+pub fn discovery_targets() -> Vec<DiscoveryTarget> {
+    let mut targets = Vec::new();
+    let mut seen = BTreeSet::new();
+
+    for (id, definition) in load_catalog().providers {
+        let base_url = match definition.base_url.clone() {
+            Some(url) if !url.trim().is_empty() => url,
+            _ if definition.kind == ProviderKind::Ollama || definition.id == "ollama" => {
+                "http://127.0.0.1:11434".into()
+            }
+            _ => continue,
+        };
+        let persist = !is_default_local_ollama(&definition);
+        seen.insert(id.clone());
+        targets.push(DiscoveryTarget {
+            id,
+            base_url,
+            kind: definition.kind,
+            persist,
+            required: persist,
+        });
+    }
+
+    for target in targets_from_models_yml(&read_models_yml()) {
+        if seen.contains(&target.id) {
+            continue;
+        }
+        seen.insert(target.id.clone());
+        targets.push(target);
+    }
+
+    targets
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        ProviderDefinition, ProviderKind, is_default_local_ollama, ollama_openai_base_url,
-        ollama_root_url,
+        ProviderDefinition, ProviderKind, infer_discovery_kind, is_default_local_ollama,
+        is_loopback_url, ollama_openai_base_url, ollama_root_url, targets_from_models_yml,
     };
+    use serde_json::json;
 
     #[test]
     fn normalizes_ollama_native_and_openai_urls() {
@@ -351,5 +465,58 @@ mod tests {
             api: None,
             models: vec![],
         }));
+    }
+
+    #[test]
+    fn classifies_loopback_and_remote_hosts() {
+        assert!(is_loopback_url("http://127.0.0.1:11434/v1"));
+        assert!(is_loopback_url("http://localhost:8000/v1"));
+        assert!(!is_loopback_url("https://inference.example/v1"));
+    }
+
+    #[test]
+    fn infers_ollama_from_id_port_or_api() {
+        assert_eq!(
+            infer_discovery_kind("ollama-work", None, "http://10.0.0.2:11434"),
+            ProviderKind::Ollama
+        );
+        assert_eq!(
+            infer_discovery_kind("local", Some("ollama"), "http://10.0.0.2:11434/v1"),
+            ProviderKind::Ollama
+        );
+        assert_eq!(
+            infer_discovery_kind(
+                "tinfoil",
+                Some("openai-completions"),
+                "https://inference.tinfoil.sh/v1/"
+            ),
+            ProviderKind::OpenaiCompatible
+        );
+    }
+
+    #[test]
+    fn reads_live_discovery_targets_from_models_yml() {
+        let root = json!({
+            "providers": {
+                "tinfoil": {
+                    "api": "openai-completions",
+                    "baseUrl": "https://inference.tinfoil.sh/v1/",
+                    "discovery": { "type": "openai-models-list" }
+                },
+                "anthropic": { "apiKey": "sk-test" },
+                "ollama-lan": {
+                    "api": "openai-completions",
+                    "baseUrl": "http://10.0.0.2:11434/v1"
+                }
+            }
+        });
+        let targets = targets_from_models_yml(&root);
+        assert_eq!(targets.len(), 2);
+        let tinfoil = targets.iter().find(|t| t.id == "tinfoil").unwrap();
+        assert_eq!(tinfoil.kind, ProviderKind::OpenaiCompatible);
+        assert!(tinfoil.required);
+        assert!(!tinfoil.persist);
+        let ollama = targets.iter().find(|t| t.id == "ollama-lan").unwrap();
+        assert_eq!(ollama.kind, ProviderKind::Ollama);
     }
 }

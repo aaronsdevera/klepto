@@ -546,9 +546,10 @@ export class KleptoDaemon {
     }
   }
 
-  async listModels(): Promise<ModelsResponse> {
+  async listModels(options?: { refresh?: boolean }): Promise<ModelsResponse> {
     try {
-      return await this.requestJson<ModelsResponse>('/models');
+      const query = options?.refresh ? '?refresh=true' : '';
+      return await this.requestJson<ModelsResponse>(`/models${query}`);
     } catch (e) {
       console.error('Failed to list models:', e);
       return { models: [], providers: [], suggested: true, message: String(e) };
